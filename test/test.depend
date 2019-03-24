@@ -1,0 +1,11 @@
+# depslib dependency file v1.0
+1553432308 source:c:\users\user\documents\codeblocks\test\main.cpp
+	<iostream>
+	<windows.h>
+	<stdlib.h>
+
+1553432272 source:c:\users\user\documents\codeblocks\test\test.cpp
+	<iostream>
+	<windows.h>
+	<stdlib.h>
+
