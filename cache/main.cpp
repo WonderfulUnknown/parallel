@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <stdlib.h>
 
+#include "test_N.h"
+
 using namespace std;
 
 const int N = 10240;
@@ -47,4 +49,6 @@ int main()
 
   QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
   cout << "Î´ÓÅ»¯: " << (tail - head) * 1000.0 / freq << "ms" << endl;
+
+  test();
 }

@@ -31,6 +31,9 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename="main.cpp" />
+		<Unit filename="test_N.cpp" />
+		<Unit filename="test_N.h" />
 		<Extensions>
 			<code_completion />
 			<envvars />
