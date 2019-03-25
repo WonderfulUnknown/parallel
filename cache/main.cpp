@@ -26,9 +26,9 @@ int main()
   init();
 
   QueryPerformanceFrequency((LARGE_INTEGER *)&freq); // similar to CLOCKS_PER_SEC
-  QueryPerformanceCounter((LARGE_INTEGER *)&head);   // start time
 
   //cache优化
+  QueryPerformanceCounter((LARGE_INTEGER *)&head);   // start time
   for (int i = 0; i < N; i++)
   {
     result[i] = 0.0;
@@ -40,6 +40,7 @@ int main()
   cout << "cache优化: " << (tail - head) * 1000.0 / freq << "ms" << endl;
 
   //未优化
+  QueryPerformanceCounter((LARGE_INTEGER *)&head);   // start time
   for (int j = 0; j < N; j++)
   {
     result[j] = 0.0;
