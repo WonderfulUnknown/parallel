@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1553482367 source:c:\users\user\documents\codeblocks\cache\test_n.cpp
+	<iostream>
+	<windows.h>
+	<stdlib.h>
+
