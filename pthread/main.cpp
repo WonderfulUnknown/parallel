@@ -8,13 +8,14 @@
 
 using namespace std;
 
-const int N = 512;
+const int N = 256;
 float **mat, **temp, **result;
 int thread_count = 4;
 int k = 0;
+long long head, freq;
 
-// pthread_mutex_t mutex_task;
-// pthread_barrier_t barrier;
+pthread_mutex_t	mutex;
+pthread_barrier_t	barrier;
 
 sem_t sem_parent;
 sem_t sem_children;
@@ -265,10 +266,62 @@ void test2()
 }
 //====================end=================
 
+//===================begin================
+//对矩阵进行划分
+void* pthread3(void *parm)
+{
+    int thread_id = (int)((size_t)parm);
+
+	//long long tail;
+
+    for (int k = 0; k < N; k++)
+    {
+        if ((k % thread_count) == thread_id)
+        {
+            for (int j = k + 1; j < N; j++)
+                mat[k][j] = mat[k][j] / mat[k][k];
+            mat[k][k] = 1.0;
+            for (int i = k + 1; i < N; i++)
+            {
+                for (int j = k + 1; j < N; j++)
+                    mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
+                mat[i][k] = 0;
+            }
+        }
+        pthread_barrier_wait(&barrier);
+    }
+
+    // pthread_mutex_lock(&mutex);
+	// QueryPerformanceCounter((LARGE_INTEGER *)&tail);
+	// cout << "Thread " << thread_id << ": " << (tail - head) * 1000.0 / freq << "ms" << endl;
+	// pthread_mutex_unlock(&mutex);
+
+	pthread_exit(NULL);
+}
+
+void test3()
+{
+    int thread;
+    pthread_t *thread_handles;
+    thread_handles = new pthread_t[thread_count];
+
+    pthread_barrier_init(&barrier, NULL, thread_count);
+
+	// QueryPerformanceCounter((LARGE_INTEGER*)&head); // start timer
+    for (thread = 0; thread < thread_count; thread++)
+        pthread_create(&thread_handles[thread], NULL, *pthread3, (void *)thread);
+
+    for (thread = 0; thread < thread_count; thread++)
+        pthread_join(thread_handles[thread], NULL);
+
+    pthread_barrier_destroy(&barrier);
+    free(thread_handles);
+}
+//====================end=================
 
 int main()
 {
-    long long head, tail, freq; // timers
+    long long tail;
     QueryPerformanceFrequency((LARGE_INTEGER *)&freq);
 
     mat = new float *[N];
@@ -300,7 +353,7 @@ int main()
     //print(result);
 
     cout << endl;
-    cout << "信号量实现" << endl;
+    cout << "循环划分+信号量实现" << endl;
     QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
     //for (int i = 0; i < 100; i++)
     //{
@@ -315,10 +368,21 @@ int main()
 
     k = 0;
     cout << endl;
-    cout << "信号量+SSE实现" << endl;
+    cout << "循环划分+信号量+SSE实现" << endl;
     QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
     copy(temp, mat);
     test2();
+    QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
+    cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
+    compare(result, mat);
+    //print(mat);
+
+    k = 0;
+    cout << endl;
+    cout << "矩阵划分+barrier实现" << endl;
+    QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
+    copy(temp, mat);
+    test3();
     QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
     cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
     compare(result, mat);
