@@ -8,7 +8,7 @@
 
 using namespace std;
 
-const int N = 1024;
+const int N = 512;
 float **mat, **temp, **result;
 int thread_count = 4;
 int k = 0;
@@ -71,9 +71,9 @@ void normal_gauss(float **mat) //普通高斯消去法
     }
 }
 
-//====================begin================
+//===================begin================
 //信号量实现
-void *gauss_thread(void *parm)
+void *pthread1(void *parm)
 {
     int thread_id = (int)((size_t)parm);
     int task_length;
@@ -82,7 +82,7 @@ void *gauss_thread(void *parm)
 
     while(N - k > thread_count)
     {
-        task_length = (N - k) / thread_count;
+        task_length = (N - k - 1) / thread_count;
         task_start = k + 1 + thread_id * task_length;
         if (thread_id != thread_count - 1)
             task_end = task_start + task_length;
@@ -102,7 +102,7 @@ void *gauss_thread(void *parm)
     pthread_exit(NULL);
 }
 
-void thread_message()
+void test1()
 {
     int thread;
     pthread_t *thread_handles;
@@ -116,7 +116,7 @@ void thread_message()
     mat[k][k] = 1;
 
     for (thread = 0; thread < thread_count; thread++)
-        pthread_create(&thread_handles[thread], NULL, *gauss_thread, (void *)thread);
+        pthread_create(&thread_handles[thread], NULL, *pthread1, (void *)thread);
 
     for (thread = 0; thread < thread_count; thread++)
         sem_wait(&sem_parent); //--
@@ -162,6 +162,110 @@ void thread_message()
 }
 //====================end=================
 
+//===================begin================
+//信号量实现 + SSE
+void *pthread2(void *parm)
+{
+    int thread_id = (int)((size_t)parm);
+    int task_length;
+    int task_start;
+    int task_end;
+    __m128 t1, t2, t3;
+    float a[4];
+    while(N - k > thread_count)
+    {
+        task_length = (N - k - 1) / thread_count;
+        task_start = k + 1 + thread_id * task_length;
+        if (thread_id != thread_count - 1)
+            task_end = task_start + task_length;
+        else
+            task_end = N;
+
+        for (int i = task_start; i < task_end; i++)
+        {
+            for (int x = 0; x < 4; x++)
+                a[x] = mat[i][k];
+            t1 = _mm_loadu_ps(a);
+            for (int j = N - 4; j >= k + 1; j -= 4)
+            {
+                t2 = _mm_loadu_ps(mat[i] + j);
+                t3 = _mm_loadu_ps(mat[k] + j);
+                t3 = _mm_mul_ps(t1, t3);
+                t3 = _mm_sub_ps(t2, t3);
+                _mm_storeu_ps(mat[i] + j, t3);
+            }
+            for (int j = k + 1; j % 4; j++)
+                mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
+            mat[i][k] = 0;
+        }
+
+        sem_post(&sem_parent);
+        sem_wait(&sem_children);
+    }
+    pthread_exit(NULL);
+}
+
+void test2()
+{
+    int thread;
+    pthread_t *thread_handles;
+    thread_handles = new pthread_t[thread_count];
+
+    sem_init(&sem_parent, 0, 0);
+    sem_init(&sem_children, 0, 0);
+
+    for (int i = k + 1; i < N; i++)
+        mat[k][i] = mat[k][i] / mat[k][k];
+    mat[k][k] = 1;
+
+    for (thread = 0; thread < thread_count; thread++)
+        pthread_create(&thread_handles[thread], NULL, *pthread2, (void *)thread);
+
+    for (thread = 0; thread < thread_count; thread++)
+        sem_wait(&sem_parent); //--
+
+    while (1)
+    {
+        k++;
+        if (k == N - thread_count)
+        {
+            for (thread = 0; thread < thread_count; thread++)
+                sem_post(&sem_children); //++
+            break;
+        }
+        for (int i = k + 1; i < N; i++)
+            mat[k][i] = mat[k][i] / mat[k][k];
+        mat[k][k] = 1;
+        for (thread = 0; thread < thread_count; thread++)
+            sem_post(&sem_children); //++
+        for (thread = 0; thread < thread_count; thread++)
+            sem_wait(&sem_parent); //--
+    }
+
+    for (k; k < N; k++)
+    {
+        for (int i = k + 1; i < N; i++)
+            mat[k][i] = mat[k][i] / mat[k][k];
+        mat[k][k] = 1;
+        for (int i = k + 1; i < N; i++)
+        {
+            for (int j = k + 1; j < N; j++)
+                mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
+            mat[i][k] = 0;
+        }
+    }
+
+    for (thread = 0; thread < thread_count; thread++)
+        pthread_join(thread_handles[thread], NULL);
+
+    sem_destroy(&sem_parent);
+    sem_destroy(&sem_children);
+
+    free(thread_handles);
+}
+//====================end=================
+
+
 int main()
 {
     long long head, tail, freq; // timers
@@ -201,10 +305,21 @@ int main()
     //for (int i = 0; i < 100; i++)
     //{
         copy(temp, mat);
-        thread_message();
+        test1();
     //}
     QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
     //cout << "耗时：" << (tail - head) * 1000.0 / freq / 100 << "ms" << endl;
+    cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
+    compare(result, mat);
+    //print(mat);
+
+    k = 0;
+    cout << endl;
+    cout << "信号量+SSE实现" << endl;
+    QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
+    copy(temp, mat);
+    test2();
+    QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
     cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
     compare(result, mat);
     //print(mat);
