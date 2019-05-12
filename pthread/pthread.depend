@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1557670957 source:c:\users\user\documents\codeblocks\pthread\main.cpp
+1557675474 source:c:\users\user\documents\codeblocks\pthread\main.cpp
 	<iostream>
 	<windows.h>
 	<stdlib.h>
