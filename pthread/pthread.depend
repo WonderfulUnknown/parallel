@@ -1,0 +1,10 @@
+# depslib dependency file v1.0
+1557662680 source:c:\users\user\documents\codeblocks\pthread\main.cpp
+	<iostream>
+	<windows.h>
+	<stdlib.h>
+	<time.h>
+	<xmmintrin.h>
+	<pthread.h>
+	<semaphore.h>
+

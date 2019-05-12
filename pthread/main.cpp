@@ -8,7 +8,7 @@
 
 using namespace std;
 
-const int N = 8;
+const int N = 1024;
 float **mat, **temp, **result;
 int thread_count = 4;
 int k = 0;
@@ -16,8 +16,8 @@ int k = 0;
 // pthread_mutex_t mutex_task;
 // pthread_barrier_t barrier;
 
-sem_t	sem_parent;
-sem_t	sem_children;
+sem_t sem_parent;
+sem_t sem_children;
 
 void print(float **mat) //输出
 {
@@ -80,9 +80,9 @@ void *gauss_thread(void *parm)
     int task_start;
     int task_end;
 
-    while (k <= N)
+    while(N - k > thread_count)
     {
-        task_length = (N - k + 1) / thread_count;
+        task_length = (N - k) / thread_count;
         task_start = k + 1 + thread_id * task_length;
         if (thread_id != thread_count - 1)
             task_end = task_start + task_length;
@@ -98,9 +98,7 @@ void *gauss_thread(void *parm)
 
         sem_post(&sem_parent);
         sem_wait(&sem_children);
-        //fprintf(stdout, "Thread %d is finish,k = %d.\n", thread_id, k);
     }
-
     pthread_exit(NULL);
 }
 
@@ -116,7 +114,6 @@ void thread_message()
     for (int i = k + 1; i < N; i++)
         mat[k][i] = mat[k][i] / mat[k][k];
     mat[k][k] = 1;
-    k++;
 
     for (thread = 0; thread < thread_count; thread++)
         pthread_create(&thread_handles[thread], NULL, *gauss_thread, (void *)thread);
@@ -124,25 +121,42 @@ void thread_message()
     for (thread = 0; thread < thread_count; thread++)
         sem_wait(&sem_parent); //--
 
-    while (k <= N)
+    while (1)
+    {
+        k++;
+        if (k == N - thread_count)
+        {
+            for (thread = 0; thread < thread_count; thread++)
+                sem_post(&sem_children); //++
+            break;
+        }
+        for (int i = k + 1; i < N; i++)
+            mat[k][i] = mat[k][i] / mat[k][k];
+        mat[k][k] = 1;
+        for (thread = 0; thread < thread_count; thread++)
+            sem_post(&sem_children); //++
+        for (thread = 0; thread < thread_count; thread++)
+            sem_wait(&sem_parent); //--
+    }
+
+    for (k; k < N; k++)
     {
         for (int i = k + 1; i < N; i++)
             mat[k][i] = mat[k][i] / mat[k][k];
         mat[k][k] = 1;
-
-        for (thread = 0; thread < thread_count; thread++)
-            sem_post(&sem_children); //++
-        for (thread = 0; thread < thread_count; thread++)
-            sem_wait(&sem_parent);//--
-        
-        k++;
+        for (int i = k + 1; i < N; i++)
+        {
+            for (int j = k + 1; j < N; j++)
+                mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
+            mat[i][k] = 0;
+        }
     }
 
     for (thread = 0; thread < thread_count; thread++)
         pthread_join(thread_handles[thread], NULL);
 
-	sem_destroy(&sem_parent);
-	sem_destroy(&sem_children);
+    sem_destroy(&sem_parent);
+    sem_destroy(&sem_children);
 
     free(thread_handles);
 }
@@ -172,27 +186,28 @@ int main()
     copy(mat, temp);
     cout << "普通高斯消去" << endl;
     QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 10; i++)
     {
         copy(mat, result);
         normal_gauss(result);
     }
     QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
-    cout << "耗时：" << (tail - head) * 1000.0 / freq / 100 << "ms" << endl;
-    print(result);
+    cout << "耗时：" << (tail - head) * 1000.0 / freq / 10 << "ms" << endl;
+    //print(result);
 
     cout << endl;
     cout << "信号量实现" << endl;
     QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
-    for (int i = 0; i < 100; i++)
-    {
+    //for (int i = 0; i < 100; i++)
+    //{
         copy(temp, mat);
         thread_message();
-    }
+    //}
     QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
-    cout << "耗时：" << (tail - head) * 1000.0 / freq / 100 << "ms" << endl;
+    //cout << "耗时：" << (tail - head) * 1000.0 / freq / 100 << "ms" << endl;
+    cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
     compare(result, mat);
-    print(mat);
+    //print(mat);
 
     return 0;
 }
