@@ -8,7 +8,7 @@
 
 using namespace std;
 
-const int N = 8;
+const int N = 512;
 float **mat, **temp, **result;
 int thread_count = 4;
 int k = 0;
@@ -319,46 +319,49 @@ void test3()
 }
 //====================end=================
 
-//===================begin================
-//对循环进行划分 使用barrier
-void *pthread4(void *parm)
-{
-    int thread_id = (int)((size_t)parm);
-    for (int k = 0; k < N; k++)
-    {
-        for (int j = k + 1; j < N; j++)
-            mat[k][j] = mat[k][j] / mat[k][k];
-        mat[k][k] = 1.0;
+// //===================begin================
+// //对循环进行划分 使用barrier
+// void *pthread4(void *parm)
+// {
+//     int thread_id = (int)((size_t)parm);
+//     int i,j;
+//     //答案错误，舍弃
+//     for (int k = 0; k < N; k++)
+//     {
+//         for (j = k + 1 + thread_id; j < N; j += thread_count)
+//             mat[k][j] = mat[k][j] / mat[k][k];
+//         mat[k][k] = 1.0;
+//         pthread_barrier_wait(&barrier);
 
-        for (int i = k + 1 + thread_id; i < N; i += thread_count)
-        {
-            for (int j = k + 1; j < N; j++)
-                mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
-            mat[i][k] = 0;
-        }
-        pthread_barrier_wait(&barrier);
-    }
-    pthread_exit(NULL);
-}
+//         for (i = k + 1 + thread_id; i < N; i += thread_count)
+//         {
+//             for (int j = k + 1; j < N; j++)
+//                 mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
+//             mat[i][k] = 0;
+//         }
+//         pthread_barrier_wait(&barrier);
+//     }
+//     pthread_exit(NULL);
+// }
 
-void test4()
-{
-    int thread;
-    pthread_t *thread_handles;
-    thread_handles = new pthread_t[thread_count];
+// void test4()
+// {
+//     int thread;
+//     pthread_t *thread_handles;
+//     thread_handles = new pthread_t[thread_count];
 
-    pthread_barrier_init(&barrier, NULL, thread_count);
+//     pthread_barrier_init(&barrier, NULL, thread_count);
 
-    for (thread = 0; thread < thread_count; thread++)
-        pthread_create(&thread_handles[thread], NULL, *pthread4, (void *)thread);
+//     for (thread = 0; thread < thread_count; thread++)
+//         pthread_create(&thread_handles[thread], NULL, *pthread4, (void *)thread);
 
-    for (thread = 0; thread < thread_count; thread++)
-        pthread_join(thread_handles[thread], NULL);
+//     for (thread = 0; thread < thread_count; thread++)
+//         pthread_join(thread_handles[thread], NULL);
 
-    pthread_barrier_destroy(&barrier);
-    free(thread_handles);
-}
-//====================end=================
+//     pthread_barrier_destroy(&barrier);
+//     free(thread_handles);
+// }
+// //====================end=================
 
 int main()
 {
@@ -427,18 +430,18 @@ int main()
     QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
     cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
     compare(result, mat);
-    print(mat);
+    //print(mat);
 
-    k = 0;
-    cout << endl;
-    cout << "循环划分+barrier实现" << endl;
-    QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
-    copy(temp, mat);
-    test4();
-    QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
-    cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
-    compare(result, mat);
-    print(mat);
+    // k = 0;
+    // cout << endl;
+    // cout << "循环划分+barrier实现" << endl;
+    // QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
+    // copy(temp, mat);
+    // test4();
+    // QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
+    // cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
+    // compare(result, mat);
+    //print(mat);
 
     return 0;
 }
