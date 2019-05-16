@@ -1,0 +1,10 @@
+# depslib dependency file v1.0
+1558015598 source:c:\users\user\documents\codeblocks\openmp\main.cpp
+	<stdio.h>
+	<stdlib.h>
+	<iostream>
+	<time.h>
+	<xmmintrin.h>
+	<windows.h>
+	<omp.h>
+
