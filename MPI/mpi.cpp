@@ -1,145 +1,164 @@
-#include <mpi.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include <iostream>
 #include <malloc.h>
 #include <stdlib.h>
 #include <math.h>
 #include <sys/time.h>
-int n = 4096;
+#include "mpi.h"
+
+using namespace std;
+
+const int N = 4096;
+float **mat, **temp, **answer;
+long long head, freq;
+
+void print(float **mat) //输出
+{
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+            cout << mat[i][j] << " ";
+        cout << endl;
+    }
+}
+
+void compare(float **m1, float **m2)
+{
+    bool flag = true;
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+            if (m1[i][j] != m2[i][j])
+                flag = false;
+    }
+    cout << "======================" << endl;
+    if (flag)
+        cout << "the result is the same" << endl;
+    else
+        cout << "the result is different" << endl;
+    cout << "======================" << endl;
+}
+
+void copy(float **m1, float **m2)
+{
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+            m2[i][j] = m1[i][j];
+    }
+}
+
+void normal_gauss(float **mat) //普通高斯消去法
+{
+    for (int k = 0; k < N; k++)
+    {
+        for (int j = k + 1; j < N; j++)
+            mat[k][j] = mat[k][j] / mat[k][k];
+        mat[k][k] = 1.0;
+        for (int i = k + 1; i < N; i++)
+        {
+            for (int j = k + 1; j < N; j++)
+                mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
+            mat[i][k] = 0;
+        }
+    }
+}
+
+void test1(int argc, char *argv[])
+{
+	int counts, my_id;
+	float **result = new (float *)[N];
+	float *msg = new float [N];
+    for (int i = 0; i < N; i++)
+        result[i] = new float [N];
+
+	MPI_Status status;
+	MPI_Init(&argc, &argv);
+	MPI_Comm_rank(MPI_COMM_WORLD, &my_id);  //报告识别调用进程的rank
+	MPI_Comm_size(MPI_COMM_WORLD, &counts); //报告进程数
+
+	int block_size = N / counts;
+
+	if (my_id == 0)
+	{
+		gettimeofday(&pcstart, NULL);
+		//0号进程把矩阵传递给其他进程
+		for (int i = my_id + 1; i < counts; i++)
+			for (int j = i * (N / counts); j < (i + 1) * (N / counts); j++)
+				MPI_Send(mat[j], N, MPI_FLOAT, i, 99, MPI_COMM_WORLD);
+		gettimeofday(&pstart, NULL);
+	}
+	else
+	{
+		for (int i = 0; i < N / counts; i++)
+			MPI_Recv(temp[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD, &status);
+	}
+
+	int m = 0;
+	for (int k = 0; k < N; k++)
+	{
+		if (k < (my_id + 1) * block_size && k >= my_id * block_size)
+		{
+			for (int j = k + 1; j < N; j++)
+				temp[m][j] = temp[m][j] / temp[m][k];
+			temp[m][k] = 1;
+			for (int j = 0; j < n; j++)
+				msg[j] = temp[m][j];
+			m++;//保证按序，需要考虑是否有其他更好的写法
+		}
+		//将计算好的结果广播
+		MPI_Bcast(msg, N, MPI_FLOAT, k / block_size, MPI_COMM_WORLD);
+		if (k < (my_id + 1) * block_size)
+		{
+			for (int i = m; i < block_size; i++)
+			{
+				for (int j = k + 1; j < n; j++)
+					result[i][j] = result[i][j] - result[i][k] * msg[j];
+				result[i][k] = 0;
+			}
+		}
+	}
+	MPI_Finalize();
+}
+
 int main(int argc, char *argv[])
 {
-  int counts, rank, namelen;
-  MPI_Status status;
-  char processor_name[MPI_MAX_PROCESSOR_NAME];
+	long long tail;
+    QueryPerformanceFrequency((LARGE_INTEGER *)&freq);
 
-  MPI_Init(&argc, &argv);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Get_processor_name(processor_name, &namelen);
-  MPI_Comm_size(MPI_COMM_WORLD, &counts);
+	mat = new float *[N];
+	temp = new float *[N];
+	answer = new float *[N];
 
-  int block_size = n / counts;
-  float result;
-  double susetime;
-  double pusetime;
-  double pusetime_cost;
-  timeval pstart, pend, pcstart, pcend;
-  float **b;
-  float **a = (float **)malloc((n / counts) * sizeof(float *));
-  float *aa = (float *)malloc(n * sizeof(float));
-
-  for (int i = 0; i < n / counts; i++)
-    a[i] = (float *)malloc(n * sizeof(float));
-  if (rank == 0)
-  {
-    srand((unsigned)time(NULL));
-    b = (float **)malloc(n * sizeof(float *));
-
-    for (int i = 0; i < n; i++)
-      b[i] = (float *)malloc(n * sizeof(float));
-    float **c = (float **)malloc(n * sizeof(float *));
-    for (int i = 0; i < n; i++)
-      c[i] = (float *)malloc(n * sizeof(float));
-
-    for (int i = 0; i < n; i++)
-      for (int j = 0; j < n; j++)
-        c[i][j] = b[i][j] = rand() % 100 + 1;
-
-    timeval start, end;
-    gettimeofday(&start, NULL);
-    for (int k = 0; k < n; k++)
+    for (int i = 0; i < N; i++)
     {
-      for (int i = k + 1; i < n; i++)
-        c[k][i] = c[k][i] / c[k][k];
-      c[k][k] = 1.0f;
-      for (int i = k + 1; i < n; i++)
-        for (int j = k + 1; j < n; j++)
-          c[i][j] = c[i][j] - c[i][k] * c[k][j];
-      c[i][k] = 0.0f;
-    }
-    gettimeofday(&end, NULL);
-    susetime = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
-    susetime /= 1000;
-    cout << "susetime:" << susetime << endl;
-    result = c[n - 2][n - 1];
+        mat[i] = new float[N];
+		temp[i] = new float[N];
+		answer[i] = new float[N];
+	}
 
-    for (int i = 0; i < n; i++)
-      free(c[i]);
-    free(c);
+	srand((unsigned)time(NULL));
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++)
+            mat[i][j] = rand() % 100;
 
-    for (int i = 0; i < n / counts; i++)
-      for (int j = 0; j < n; j++)
-        a[i][j] = b[i][j];
+    cout << "============= N=" << N << "============" << endl;
 
-    gettimeofday(&pcstart, NULL);
-    for (int i = rank + 1; i < counts; i++)
-      for (int j = i * (n / counts); j < (i + 1) * (n / counts); j++)
-        MPI_Send(b[j], n, MPI_FLOAT, i, 99, MPI_COMM_WORLD);
-    gettimeofday(&pstart, NULL);
-  }
-  else
-  {
-    for (int i = 0; i < n / counts; i++)
-      MPI_Recv(a[i], n, MPI_FLOAT, 0, 99, MPI_COMM_WORLD, &status);
-  }
+    copy(mat, temp);
+    cout << "普通高斯消去" << endl;
+    QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
+    copy(mat, answer);
+    normal_gauss(answer);
+    QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
+    cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
 
-  int m = 0;
-  for (int k = 0; k < n; k++)
-  {
-    int root;
-    root = k / block_size;
-    if (k < (rank + 1) * block_size && k >= rank * block_size)
-    {
-      for (int j = k + 1; j < n; j++)
-        a[m][j] = a[m][j] / a[m][k];
-      a[m][k] = 1.0f;
-      for (int j = 0; j < n; j++)
-        aa[j] = a[m][j];
-      m = m + 1;
-    }
+    cout << endl;
+    cout << "MPI" << endl;
+    QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
+    copy(temp, mat);
+    test1(&argc, &argv);
+    QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
+    cout << "耗时：" << (tail - head) * 1000.0 / freq << "ms" << endl;
+    compare(answer, mat);
 
-    MPI_Bcast(aa, n, MPI_FLOAT, root, MPI_COMM_WORLD);
-    if (rank == 0)
-    {
-      for (int j = 0; j < n; j++)
-        b[k][j] = aa[j];
-    }
-    if (k < (rank + 1) * block_size)
-    {
-      for (int i = m; i < block_size; i++)
-      {
-        for (int j = k + 1; j < n; j++)
-          a[i][j] = a[i][j] - a[i][k] * aa[j];
-        a[i][k] = 0.0f;
-      }
-    }
-  }
-  if (rank == 0)
-  {
-    gettimeofday(&pend, NULL);
-    gettimeofday(&pcend, NULL);
-    pusetime = 1000000 * (pend.tv_sec - pstart.tv_sec) + pend.tv_usec - pstart.tv_usec;
-    pusetime /= 1000;
-
-    cout << "pusetime:" << pusetime << endl;
-    cout << "pusetime:Speedup " << susetime / pusetime << endl;
-    cout << "pusetime:E" << susetime / (pusetime * counts) << endl;
-
-    pusetime_cost = 1000000 * (pcend.tv_sec - pcstart.tv_sec) + pcend.tv_usec - pcstart.tv_usec;
-    pusetime_cost /= 1000;
-
-    cout << "pusetime_cost" << pusetime_cost << endl;
-    cout << "pusetime_cost:Speedup" << susetime / pusetime_cost << endl;
-    cout << "pusetime_cost:E" << susetime / (pusetime_cost * counts) << endl;
-
-    if (result == b[n - 2][n - 1])
-      cout << "success!" << endl;
-    else
-      cout << "false!" << endl;
-    for (int i = 0; i < n; i++)
-      free(b[i]);
-    free(b);
-  }
-  MPI_Finalize();
-  return 0;
+	return 0;
 }
