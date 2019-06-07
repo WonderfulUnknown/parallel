@@ -6,7 +6,7 @@
 
 using namespace std;
 
-const int N = 8;
+const int N = 1024;
 float mat[N][N], temp[N][N], answer[N][N], result[N][N];
 int counts, my_id;
 
@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
         copy(mat, temp);
         normal_gauss();
         copy(mat, answer);
-        print(answer);
+        /*print(answer);*/
         copy(temp, mat);
     }
 
@@ -96,18 +96,20 @@ int main(int argc, char *argv[])
     srand(time(0));
     struct timeval tstart, tend;
     gettimeofday(&tstart, NULL);
-
-    if (my_id == 0)
+    for (int k = 0; k < N; k++)
     {
-        /*0号进程把矩阵传递给其他进程*/
-        for (int i = my_id + 1; i < counts; i++)
-            for (int j = i * (N / counts); j < (i + 1) * (N / counts); j++)
-                MPI_Send(mat[j], N, MPI_FLOAT, i, 99, MPI_COMM_WORLD);
-    }
-    else
-    {
-        for (int i = 0; i < N / counts; i++)
-            MPI_Recv(temp[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD, &status);
+        if (my_id == 0)
+        {
+            /*0号进程把矩阵传递给其他进程*/
+            for (int i = 1; i < counts; i++)
+                for (int j = i * (N / counts); j < (i + 1) * (N / counts); j++)
+                    MPI_Send(mat[j], N, MPI_FLOAT, i, 99, MPI_COMM_WORLD);
+        }
+        else
+        {
+            for (int i = 0; i < N / counts; i++)
+                MPI_Recv(mat[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD, &status);
+        }
     }
 
     int m = 0;
@@ -116,27 +118,23 @@ int main(int argc, char *argv[])
         if (k < (my_id + 1) * block_size && k >= my_id * block_size)
         {
             for (int j = k + 1; j < N; j++)
-                temp[m][j] = temp[m][j] / temp[m][k];
-            temp[m][k] = 1;
+                mat[m][j] = mat[m][j] / mat[m][k];
+            mat[m][k] = 1;
             for (int j = 0; j < N; j++)
-                msg[j] = temp[m][j];
+                msg[j] = mat[m][j];
             m++; //保证按序，需要考虑是否有其他更好的写法
         }
         /*将计算好的结果广播*/
-        MPI_Bcast(msg, N, MPI_FLOAT, k / block_size, MPI_COMM_WORLD);
+        MPI_Bcast(msg, N, MPI_FLOAT, 0, MPI_COMM_WORLD);
         if (k < (my_id + 1) * block_size)
         {
             for (int i = m; i < block_size; i++)
             {
                 for (int j = k + 1; j < N; j++)
-                    result[i][j] = result[i][j] - result[i][k] * msg[j];
-                result[i][k] = 0;
+                    mat[i][j] = mat[i][j] - mat[i][k] * msg[j];
+                mat[i][k] = 0;
             }
-        }
-        if (my_id == 0)
-        {
-            for (int i = 0; i < N; i++)
-                mat[k][i] = msg[i];
+            MPI_Bcast(mat[k], N, MPI_FLOAT, 0, MPI_COMM_WORLD);
         }
     }
     if (my_id == 0)
@@ -145,7 +143,7 @@ int main(int argc, char *argv[])
         cout << endl;
         cout << "MPI块划分: " << (tend.tv_sec - tstart.tv_sec) * 1000 + (tend.tv_usec - tstart.tv_usec) / 1000 << " ms" << endl;
         compare(answer, mat);
-        print(mat);
+        /*print(mat);*/
     }
 
     MPI_Finalize();
