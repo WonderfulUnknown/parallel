@@ -1,5 +1,4 @@
 #include <iostream>
-#include <malloc.h>
 #include <stdlib.h>
 #include <math.h>
 #include <sys/time.h>
@@ -7,11 +6,11 @@
 
 using namespace std;
 
-const int N = 4096;
-float **mat, **temp, **answer;
-long long head, freq;
+const int N = 8;
+float mat[N][N], temp[N][N], answer[N][N], result[N][N];
+int counts, my_id;
 
-void print(float **mat) //è¾“å‡º
+void print(float mat[N][N]) //Êä³ö
 {
     for (int i = 0; i < N; i++)
     {
@@ -21,7 +20,7 @@ void print(float **mat) //è¾“å‡º
     }
 }
 
-void compare(float **m1, float **m2)
+void compare(float m1[N][N], float m2[N][N])
 {
     bool flag = true;
     for (int i = 0; i < N; i++)
@@ -38,7 +37,7 @@ void compare(float **m1, float **m2)
     cout << "======================" << endl;
 }
 
-void copy(float **m1, float **m2)
+void copy(float m1[N][N], float m2[N][N])
 {
     for (int i = 0; i < N; i++)
     {
@@ -47,8 +46,11 @@ void copy(float **m1, float **m2)
     }
 }
 
-void normal_gauss(float **mat) //æ™®é€šé«˜æ–¯æ¶ˆåŽ»æ³•
+void normal_gauss() //ÆÕÍ¨¸ßË¹ÏûÈ¥·¨
 {
+    srand(time(0));
+    struct timeval tstart, tend;
+    gettimeofday(&tstart, NULL);
     for (int k = 0; k < N; k++)
     {
         for (int j = k + 1; j < N; j++)
@@ -61,104 +63,91 @@ void normal_gauss(float **mat) //æ™®é€šé«˜æ–¯æ¶ˆåŽ»æ³•
             mat[i][k] = 0;
         }
     }
-}
 
-void test1(int argc, char *argv[])
-{
-	int counts, my_id;
-	float **result = new (float *)[N];
-	float *msg = new float [N];
-    for (int i = 0; i < N; i++)
-        result[i] = new float [N];
-
-	MPI_Status status;
-	MPI_Init(&argc, &argv);
-	MPI_Comm_rank(MPI_COMM_WORLD, &my_id);  //æŠ¥å‘Šè¯†åˆ«è°ƒç”¨è¿›ç¨‹çš„rank
-	MPI_Comm_size(MPI_COMM_WORLD, &counts); //æŠ¥å‘Šè¿›ç¨‹æ•°
-
-	int block_size = N / counts;
-
-	if (my_id == 0)
-	{
-		gettimeofday(&pcstart, NULL);
-		//0å·è¿›ç¨‹æŠŠçŸ©é˜µä¼ é€’ç»™å…¶ä»–è¿›ç¨‹
-		for (int i = my_id + 1; i < counts; i++)
-			for (int j = i * (N / counts); j < (i + 1) * (N / counts); j++)
-				MPI_Send(mat[j], N, MPI_FLOAT, i, 99, MPI_COMM_WORLD);
-		gettimeofday(&pstart, NULL);
-	}
-	else
-	{
-		for (int i = 0; i < N / counts; i++)
-			MPI_Recv(temp[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD, &status);
-	}
-
-	int m = 0;
-	for (int k = 0; k < N; k++)
-	{
-		if (k < (my_id + 1) * block_size && k >= my_id * block_size)
-		{
-			for (int j = k + 1; j < N; j++)
-				temp[m][j] = temp[m][j] / temp[m][k];
-			temp[m][k] = 1;
-			for (int j = 0; j < n; j++)
-				msg[j] = temp[m][j];
-			m++;//ä¿è¯æŒ‰åºï¼Œéœ€è¦è€ƒè™‘æ˜¯å¦æœ‰å…¶ä»–æ›´å¥½çš„å†™æ³•
-		}
-		//å°†è®¡ç®—å¥½çš„ç»“æžœå¹¿æ’­
-		MPI_Bcast(msg, N, MPI_FLOAT, k / block_size, MPI_COMM_WORLD);
-		if (k < (my_id + 1) * block_size)
-		{
-			for (int i = m; i < block_size; i++)
-			{
-				for (int j = k + 1; j < n; j++)
-					result[i][j] = result[i][j] - result[i][k] * msg[j];
-				result[i][k] = 0;
-			}
-		}
-	}
-	MPI_Finalize();
+    gettimeofday(&tend, NULL);
+    cout << "ÆÕÍ¨¸ßË¹ÏûÈ¥: " << (tend.tv_sec - tstart.tv_sec) * 1000 + (tend.tv_usec - tstart.tv_usec) / 1000 << " ms" << endl;
 }
 
 int main(int argc, char *argv[])
 {
-	long long tail;
-    QueryPerformanceFrequency((LARGE_INTEGER *)&freq);
-
-	mat = new float *[N];
-	temp = new float *[N];
-	answer = new float *[N];
-
-    for (int i = 0; i < N; i++)
+    MPI_Status status;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_id);  //±¨¸æÊ¶±ðµ÷ÓÃ½ø³ÌµÄrank
+    MPI_Comm_size(MPI_COMM_WORLD, &counts); //±¨¸æ½ø³ÌÊý
+    if (my_id == 0)
     {
-        mat[i] = new float[N];
-		temp[i] = new float[N];
-		answer[i] = new float[N];
-	}
+        srand((unsigned)time(NULL));
+        for (int i = 0; i < N; i++)
+            for (int j = 0; j < N; j++)
+                mat[i][j] = rand() % 100;
 
-	srand((unsigned)time(NULL));
-    for (int i = 0; i < N; i++)
-        for (int j = 0; j < N; j++)
-            mat[i][j] = rand() % 100;
+        cout << "============= N=" << N << "============" << endl;
 
-    cout << "============= N=" << N << "============" << endl;
+        copy(mat, temp);
+        normal_gauss();
+        copy(mat, answer);
+        print(answer);
+        copy(temp, mat);
+    }
 
-    copy(mat, temp);
-    cout << "æ™®é€šé«˜æ–¯æ¶ˆåŽ»" << endl;
-    QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
-    copy(mat, answer);
-    normal_gauss(answer);
-    QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
-    cout << "è€—æ—¶ï¼š" << (tail - head) * 1000.0 / freq << "ms" << endl;
+    float msg[N];
+    int block_size = N / counts;
 
-    cout << endl;
-    cout << "MPI" << endl;
-    QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
-    copy(temp, mat);
-    test1(&argc, &argv);
-    QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
-    cout << "è€—æ—¶ï¼š" << (tail - head) * 1000.0 / freq << "ms" << endl;
-    compare(answer, mat);
+    srand(time(0));
+    struct timeval tstart, tend;
+    gettimeofday(&tstart, NULL);
 
-	return 0;
+    if (my_id == 0)
+    {
+        /*0ºÅ½ø³Ì°Ñ¾ØÕó´«µÝ¸øÆäËû½ø³Ì*/
+        for (int i = my_id + 1; i < counts; i++)
+            for (int j = i * (N / counts); j < (i + 1) * (N / counts); j++)
+                MPI_Send(mat[j], N, MPI_FLOAT, i, 99, MPI_COMM_WORLD);
+    }
+    else
+    {
+        for (int i = 0; i < N / counts; i++)
+            MPI_Recv(temp[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD, &status);
+    }
+
+    int m = 0;
+    for (int k = 0; k < N; k++)
+    {
+        if (k < (my_id + 1) * block_size && k >= my_id * block_size)
+        {
+            for (int j = k + 1; j < N; j++)
+                temp[m][j] = temp[m][j] / temp[m][k];
+            temp[m][k] = 1;
+            for (int j = 0; j < N; j++)
+                msg[j] = temp[m][j];
+            m++; //±£Ö¤°´Ðò£¬ÐèÒª¿¼ÂÇÊÇ·ñÓÐÆäËû¸üºÃµÄÐ´·¨
+        }
+        /*½«¼ÆËãºÃµÄ½á¹û¹ã²¥*/
+        MPI_Bcast(msg, N, MPI_FLOAT, k / block_size, MPI_COMM_WORLD);
+        if (k < (my_id + 1) * block_size)
+        {
+            for (int i = m; i < block_size; i++)
+            {
+                for (int j = k + 1; j < N; j++)
+                    result[i][j] = result[i][j] - result[i][k] * msg[j];
+                result[i][k] = 0;
+            }
+        }
+        if (my_id == 0)
+        {
+            for (int i = 0; i < N; i++)
+                mat[k][i] = msg[i];
+        }
+    }
+    if (my_id == 0)
+    {
+        gettimeofday(&tend, NULL);
+        cout << endl;
+        cout << "MPI¿é»®·Ö: " << (tend.tv_sec - tstart.tv_sec) * 1000 + (tend.tv_usec - tstart.tv_usec) / 1000 << " ms" << endl;
+        compare(answer, mat);
+        print(mat);
+    }
+
+    MPI_Finalize();
+    return 0;
 }

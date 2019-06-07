@@ -1,0 +1,17 @@
+# depslib dependency file v1.0
+1559897353 source:c:\users\user\documents\codeblocks\mpi\test.cpp
+	"mpi.h"
+	<stdio.h>
+
+1559900822 source:c:\users\user\documents\codeblocks\mpi\mpi.cpp
+	"mpi.h"
+	<stdio.h>
+	<math.h>
+	<string.h>
+	<omp.h>
+	<immintrin.h>
+	<math.h>
+	<time.h>
+	<iostream>
+	<sys/time.h>
+
