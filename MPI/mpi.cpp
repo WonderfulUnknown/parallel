@@ -89,19 +89,20 @@ int main(int argc, char *argv[])
         /*print(answer);*/
         copy(temp, mat);
     }
-    int block_size = N / counts;
 
     srand(time(0));
     struct timeval tstart, tend;
     gettimeofday(&tstart, NULL);
 
-    /*MPI_Barrier(MPI_COMM_WORLD);//所有语句都执行了该调用才继续*/
     /*把矩阵广播给所有进程*/
     MPI_Bcast(mat, N * N, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    int block_size = N / counts;
     int begin = my_id * block_size;
     int end = (my_id + 1) * block_size;
+    int root = 0;
     for (int k = 0; k < N; k++)
     {
+        root = k / block_size;
         if (k >= begin && k < end)
         {
             for (int j = k + 1; j < N; j++)
@@ -109,19 +110,21 @@ int main(int argc, char *argv[])
             mat[k][k] = 1;
         }
         /*将自己计算好的结果广播*/
-        MPI_Bcast(mat[k], N, MPI_FLOAT, my_id, MPI_COMM_WORLD);
+        MPI_Bcast(mat[k], N, MPI_FLOAT, root, MPI_COMM_WORLD);
 
         for (int i = k + 1; i < N; i++)
         {
+            root = i / block_size;
             if (i >= begin && i < end)
             {
                 for (int j = k + 1; j < N; j++)
                     mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
                 mat[i][k] = 0;
             }
+            MPI_Bcast(mat[i], N, MPI_FLOAT, root, MPI_COMM_WORLD);
         }
-        MPI_Bcast(mat[k], N, MPI_FLOAT, my_id, MPI_COMM_WORLD);
     }
+
     if (my_id == 0)
     {
         gettimeofday(&tend, NULL);
