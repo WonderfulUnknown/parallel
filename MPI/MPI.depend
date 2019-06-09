@@ -3,15 +3,13 @@
 	"mpi.h"
 	<stdio.h>
 
-1559900822 source:c:\users\user\documents\codeblocks\mpi\mpi.cpp
-	"mpi.h"
-	<stdio.h>
-	<math.h>
-	<string.h>
-	<omp.h>
-	<immintrin.h>
-	<math.h>
-	<time.h>
+1560070875 source:c:\users\user\documents\codeblocks\mpi\mpi.cpp
 	<iostream>
+	<stdlib.h>
+	<math.h>
 	<sys/time.h>
+	<stdio.h>
+	<windows.h>
+	<time.h>
+	"mpi.h"
 
