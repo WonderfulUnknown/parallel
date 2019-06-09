@@ -3,7 +3,7 @@
 	"mpi.h"
 	<stdio.h>
 
-1560070875 source:c:\users\user\documents\codeblocks\mpi\mpi.cpp
+1560086526 source:c:\users\user\documents\codeblocks\mpi\mpi.cpp
 	<iostream>
 	<stdlib.h>
 	<math.h>
@@ -12,4 +12,11 @@
 	<windows.h>
 	<time.h>
 	"mpi.h"
+	<xmmintrin.h>
+	<emmintrin.h>
+	<pmmintrin.h>
+	<tmmintrin.h>
+	<smmintrin.h>
+	<nmmintrin.h>
+	<omp.h>
 

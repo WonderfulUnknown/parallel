@@ -15,7 +15,19 @@
 
 using namespace std;
 
-const int N = 1024;
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
+#ifdef _OPENMP
+int my_rank = omp_get_thread_num();
+int thread_count = 4;
+#else
+int my_rank = 0;
+int thread_count = 1;
+#endif
+
+const int N = 512;
 float mat[N][N], temp[N][N], answer[N][N];
 int counts, my_id;
 long long head, tail, freq; // timers
@@ -80,14 +92,14 @@ void normal_gauss() //普通高斯消去法
     if (my_id == 0)
     {
         QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
-        cout << endl;
-        cout << "普通高斯消去" << (tail - head) * 1000.0 / freq << "ms" << endl;
+        cout << "普通高斯消去：" << (tail - head) * 1000.0 / freq << "ms" << endl;
     }
 }
 
 /*MPI块划分*/
 void test1()
 {
+    MPI_Status status;
     if (my_id == 0)
         copy(temp, mat);
     /*把矩阵广播给所有进程*/
@@ -98,9 +110,6 @@ void test1()
     int end = (my_id + 1) * block_size;
     int root = 0;
 
-    // srand(time(0));
-    // struct timeval tstart, tend;
-    // gettimeofday(&tstart, NULL);
     QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
 
     for (int k = 0; k < N; k++)
@@ -117,24 +126,33 @@ void test1()
 
         for (int i = k + 1; i < N; i++)
         {
-            root = i / block_size;
+            //root = i / block_size;
             if (i >= begin && i < end)
             {
                 for (int j = k + 1; j < N; j++)
                     mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
                 mat[i][k] = 0;
             }
-            MPI_Bcast(mat[i], N, MPI_FLOAT, root, MPI_COMM_WORLD);
+            //不必要的传播，几乎相当于串行
+            // MPI_Bcast(mat[i], N, MPI_FLOAT, root, MPI_COMM_WORLD);
+            // if (my_id == root && my_id != 0)
+            // MPI_Send(mat[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
+            // else if (my_id != root && my_id == 0)
+            // MPI_Recv(mat[i], N, MPI_FLOAT, root, 99, MPI_COMM_WORLD, &status);
         }
     }
-
-    if (my_id == 0)
+    if (my_id != 0)
     {
+        for (int j = begin; j < end; j++)
+            MPI_Send(mat[j], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
+    }
+    else
+    {
+        for (int i = 1; i < counts; i++)
+            MPI_Recv(mat[i * block_size], block_size * N, MPI_FLOAT, i, 99, MPI_COMM_WORLD, &status);
         QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
-        // gettimeofday(&tend, NULL);
         cout << endl;
         cout << "MPI块划分：" << (tail - head) * 1000.0 / freq << "ms" << endl;
-        //cout << "MPI块划分: " << (tend.tv_sec - tstart.tv_sec) * 1000 + (tend.tv_usec - tstart.tv_usec) / 1000 << " ms" << endl;
         compare(answer, mat);
     }
 }
@@ -142,6 +160,7 @@ void test1()
 /*MPI循环划分*/
 void test2()
 {
+    MPI_Status status;
     if (my_id == 0)
         copy(temp, mat);
     MPI_Bcast(mat, N * N, MPI_FLOAT, 0, MPI_COMM_WORLD);
@@ -167,8 +186,14 @@ void test2()
                 for (int j = k + 1; j < N; j++)
                     mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
                 mat[i][k] = 0;
+                if(my_id != 0)
+                    MPI_Send(mat[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
             }
-            MPI_Bcast(mat[i], N, MPI_FLOAT, root, MPI_COMM_WORLD);
+            // MPI_Bcast(mat[i], N, MPI_FLOAT, root, MPI_COMM_WORLD);
+            // if (my_id == root && my_id != 0)
+            //     MPI_Send(mat[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
+            if (root != 0 && my_id == 0)
+                MPI_Recv(mat[i], N, MPI_FLOAT, root, 99, MPI_COMM_WORLD, &status);
         }
     }
 
@@ -181,32 +206,38 @@ void test2()
     }
 }
 
-/*MPI循环划分 + SSE*/
+/*MPI块划分 + SSE*/
 void test3()
 {
+    MPI_Status status;
     if (my_id == 0)
         copy(temp, mat);
     MPI_Bcast(mat, N * N, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
+    int block_size = N / counts;
+    int begin = my_id * block_size;
+    int end = (my_id + 1) * block_size;
     int root = 0;
+
     __m128 t1, t2, t3;
     float a[4];
+
     QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
 
     for (int k = 0; k < N; k++)
     {
-        if (my_id == 0)
+        root = k / block_size;
+        if (k >= begin && k < end)
         {
             for (int j = k + 1; j < N; j++)
                 mat[k][j] = mat[k][j] / mat[k][k];
             mat[k][k] = 1;
         }
-        MPI_Bcast(mat[k], N, MPI_FLOAT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(mat[k], N, MPI_FLOAT, root, MPI_COMM_WORLD);
 
         for (int i = k + 1; i < N; i++)
         {
-            root = (i - k - 1) % counts;
-            if (my_id == root)
+            if (i >= begin && i < end)
             {
                 for (int x = 0; x < 4; x++)
                     a[x] = mat[i][k];
@@ -223,15 +254,77 @@ void test3()
                     mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
                 mat[i][k] = 0;
             }
-            MPI_Bcast(mat[i], N, MPI_FLOAT, root, MPI_COMM_WORLD);
         }
     }
-
-    if (my_id == 0)
+    if (my_id != 0)
     {
+        for (int j = begin; j < end; j++)
+            MPI_Send(mat[j], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
+    }
+    else
+    {
+        for (int i = 1; i < counts; i++)
+            MPI_Recv(mat[i * block_size], block_size * N, MPI_FLOAT, i, 99, MPI_COMM_WORLD, &status);
+
         QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
         cout << endl;
-        cout << "循环划分+SSE：" << (tail - head) * 1000.0 / freq << "ms" << endl;
+        cout << "块划分+SSE：" << (tail - head) * 1000.0 / freq << "ms" << endl;
+        compare(answer, mat);
+    }
+}
+
+/*MPI循环划分 + openmp*/
+void test4()
+{
+    MPI_Status status;
+    if (my_id == 0)
+        copy(temp, mat);
+    /*把矩阵广播给所有进程*/
+    MPI_Bcast(mat, N * N, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+    int block_size = N / counts;
+    int begin = my_id * block_size;
+    int end = (my_id + 1) * block_size;
+    int root = 0;
+
+    QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
+
+    
+    for (int k = 0; k < N; k++)
+    {
+        root = k / block_size;
+        if (k >= begin && k < end)
+        {
+            for (int j = k + 1; j < N; j++)
+                mat[k][j] = mat[k][j] / mat[k][k];
+            mat[k][k] = 1;
+        }
+        MPI_Bcast(mat[k], N, MPI_FLOAT, root, MPI_COMM_WORLD);
+
+        //#pragma omp parallel
+        for (int i = k + 1; i < N; i++)
+        {
+            if (i >= begin && i < end)
+            {
+               //#pragma omp for
+                for (int j = k + 1; j < N; j++)
+                    mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
+                mat[i][k] = 0;
+            }
+        }
+    }
+    if (my_id != 0)
+    {
+        for (int j = begin; j < end; j++)
+            MPI_Send(mat[j], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
+    }
+    else
+    {
+        for (int i = 1; i < counts; i++)
+            MPI_Recv(mat[i * block_size], block_size * N, MPI_FLOAT, i, 99, MPI_COMM_WORLD, &status);
+        QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
+        cout << endl;
+        cout << "MPI块划分：" << (tail - head) * 1000.0 / freq << "ms" << endl;
         compare(answer, mat);
     }
 }
@@ -258,8 +351,12 @@ int main(int argc, char *argv[])
     }
 
     test1();
+    MPI_Barrier(MPI_COMM_WORLD);
     test2();
+    MPI_Barrier(MPI_COMM_WORLD);
     test3();
+    MPI_Barrier(MPI_COMM_WORLD);
+    test4();
 
     MPI_Finalize();
     return 0;
