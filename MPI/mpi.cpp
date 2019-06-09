@@ -27,7 +27,7 @@ int my_rank = 0;
 int thread_count = 1;
 #endif
 
-const int N = 512;
+const int N = 8;
 float mat[N][N], temp[N][N], answer[N][N];
 int counts, my_id;
 long long head, tail, freq; // timers
@@ -144,12 +144,12 @@ void test1()
     if (my_id != 0)
     {
         for (int j = begin; j < end; j++)
-            MPI_Send(mat[j], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
+            MPI_Send(mat[j], N, MPI_FLOAT, 0, begin, MPI_COMM_WORLD);
     }
     else
     {
         for (int i = 1; i < counts; i++)
-            MPI_Recv(mat[i * block_size], block_size * N, MPI_FLOAT, i, 99, MPI_COMM_WORLD, &status);
+            MPI_Recv(mat[i * block_size], block_size * N, MPI_FLOAT, i, i * block_size, MPI_COMM_WORLD, &status);
         QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
         cout << endl;
         cout << "MPI块划分：" << (tail - head) * 1000.0 / freq << "ms" << endl;
@@ -167,7 +167,6 @@ void test2()
 
     int root = 0;
     QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
-
     for (int k = 0; k < N; k++)
     {
         if (my_id == 0)
@@ -177,26 +176,30 @@ void test2()
             mat[k][k] = 1;
         }
         MPI_Bcast(mat[k], N, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
+        //广播具有同步机制，保证每个进程运行到此时k值一样
         for (int i = k + 1; i < N; i++)
         {
-            root = (i - k - 1) % counts;
+            root = i % counts; //root代表当前负责计算的进程号
+
             if (my_id == root)
             {
                 for (int j = k + 1; j < N; j++)
                     mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
                 mat[i][k] = 0;
                 if(my_id != 0)
-                    MPI_Send(mat[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
+                    MPI_Send(mat[i], N, MPI_FLOAT, 0, i, MPI_COMM_WORLD);
             }
             // MPI_Bcast(mat[i], N, MPI_FLOAT, root, MPI_COMM_WORLD);
-            // if (my_id == root && my_id != 0)
-            //     MPI_Send(mat[i], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
-            if (root != 0 && my_id == 0)
-                MPI_Recv(mat[i], N, MPI_FLOAT, root, 99, MPI_COMM_WORLD, &status);
+            if (root != 0 && my_id == 0) //阻塞接受
+            {
+                MPI_Recv(mat[i], N, MPI_FLOAT, root, i, MPI_COMM_WORLD, &status);
+                //debug
+                //printf("i=%d Msg=%d from %d with tag %d\n",
+                     //  i,mat[i], status.MPI_SOURCE, status.MPI_TAG);
+            }
         }
+    MPI_Barrier(MPI_COMM_WORLD);
     }
-
     if (my_id == 0)
     {
         QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
@@ -289,7 +292,6 @@ void test4()
 
     QueryPerformanceCounter((LARGE_INTEGER *)&head); // start time
 
-    
     for (int k = 0; k < N; k++)
     {
         root = k / block_size;
@@ -301,12 +303,12 @@ void test4()
         }
         MPI_Bcast(mat[k], N, MPI_FLOAT, root, MPI_COMM_WORLD);
 
-        //#pragma omp parallel
+        #pragma omp parallel
         for (int i = k + 1; i < N; i++)
         {
             if (i >= begin && i < end)
             {
-               //#pragma omp for
+                #pragma omp for
                 for (int j = k + 1; j < N; j++)
                     mat[i][j] = mat[i][j] - mat[i][k] * mat[k][j];
                 mat[i][k] = 0;
@@ -316,15 +318,15 @@ void test4()
     if (my_id != 0)
     {
         for (int j = begin; j < end; j++)
-            MPI_Send(mat[j], N, MPI_FLOAT, 0, 99, MPI_COMM_WORLD);
+            MPI_Send(mat[j], N, MPI_FLOAT, 0, 98, MPI_COMM_WORLD);
     }
     else
     {
         for (int i = 1; i < counts; i++)
-            MPI_Recv(mat[i * block_size], block_size * N, MPI_FLOAT, i, 99, MPI_COMM_WORLD, &status);
+            MPI_Recv(mat[i * block_size], block_size * N, MPI_FLOAT, i, 98, MPI_COMM_WORLD, &status);
         QueryPerformanceCounter((LARGE_INTEGER *)&tail); // end time
         cout << endl;
-        cout << "MPI块划分：" << (tail - head) * 1000.0 / freq << "ms" << endl;
+        cout << "块划分+OpenMP：" << (tail - head) * 1000.0 / freq << "ms" << endl;
         compare(answer, mat);
     }
 }
@@ -338,7 +340,7 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &counts); //报告进程数
     if (my_id == 0)
     {
-        srand((unsigned)time(NULL));
+        //srand((unsigned)time(NULL));
         for (int i = 0; i < N; i++)
             for (int j = 0; j < N; j++)
                 mat[i][j] = rand() % 100;
